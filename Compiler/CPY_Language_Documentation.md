@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">The CPY Programming Language</h1>
-  <p align="center"><strong>Version 1.0 — Language Reference & Technical Documentation</strong></p>
-  <p align="center"><em>A C‑structured, Python‑simple programming language</em></p>
+  <p align="center"><strong>Version 1.1 — Language Reference & Technical Documentation</strong></p>
+  <p align="center"><em>A C‑structured, Python‑simple compiled programming language</em></p>
 </p>
 
 ---
@@ -29,7 +29,9 @@
 
 ## 1. Introduction
 
-**CPY** (pronounced *"see‑pie"*) is a statically‑checked, dynamically‑typed programming language designed for clarity and learning. It blends the structural rigour of C—braces, semicolons, explicit declarations—with the readability of Python.
+**CPY** (pronounced *"see‑pie"*) is a **compiled**, statically‑checked, dynamically‑typed programming language designed for clarity and learning. It blends the structural rigour of C—braces, semicolons, explicit declarations—with the readability of Python.
+
+CPY source code is **compiled to bytecode** (`.cpyc` files), which is then executed by the **CPY Virtual Machine** — a stack‑based runtime. Compilation and execution are fully separate steps.
 
 ### Design Goals
 
@@ -42,7 +44,7 @@
 
 ### What CPY Is Not
 
-CPY is an interpreted educational language. It is not intended for production systems, concurrent programming, or large‑scale applications.
+CPY is an educational compiled language. It is not intended for production systems, concurrent programming, or large‑scale applications.
 
 ---
 
@@ -50,36 +52,61 @@ CPY is an interpreted educational language. It is not intended for production sy
 
 ### Prerequisites
 
-- **Java 8** or later (JDK)
+- **Java 8** or later (JDK — must include `javac`)
+
+### Installation
+
+Double-click **`install.bat`** or run it from the terminal:
+
+```bash
+install.bat
+```
+
+The installer will:
+1. ✅ Verify Java is installed
+2. ✅ Compile the CPY compiler
+3. ✅ Add `cpy` to your system PATH
+4. ✅ Run a self-test to verify everything works
+
+After installation, **restart your terminal** and the `cpy` command is available globally.
 
 ### Project Structure
 
 ```
 Compiler/
+├── install.bat       (one-click installer)
+├── cpy.bat           (CLI entry point)
 ├── src/
 │   ├── Main.java
-│   ├── lexer/       (TokenType, Token, Lexer)
-│   ├── parser/      (Parser)
-│   ├── ast/         (AST node classes)
-│   ├── semantic/    (SemanticAnalyzer)
-│   └── interpreter/ (Interpreter)
-└── test.cpy         (sample program)
+│   ├── lexer/        (TokenType, Token, Lexer)
+│   ├── parser/       (Parser)
+│   ├── ast/          (AST node classes)
+│   ├── semantic/     (SemanticAnalyzer)
+│   ├── compiler/     (BytecodeCompiler, BytecodeWriter, BytecodeReader)
+│   └── vm/           (VM — stack-based virtual machine)
+├── test.cpy          (sample program)
+└── test.cpyc         (compiled bytecode)
 ```
 
-### Building
+### CLI Commands
+
+**Compile and run** in one shot:
 
 ```bash
-javac -d out src/Main.java src/lexer/*.java src/parser/*.java \
-      src/ast/*.java src/semantic/*.java src/interpreter/*.java
+cpy compile run myfile.cpy
 ```
 
-### Running a Program
+**Compile only** (produces `.cpyc`):
 
 ```bash
-java -cp out Main <filename>.cpy
+cpy compile myfile.cpy
 ```
 
-If no filename is provided, the compiler defaults to `test.cpy` in the current directory.
+**Run** a previously compiled file:
+
+```bash
+cpy run myfile.cpyc
+```
 
 ### Hello, World!
 
@@ -511,21 +538,27 @@ primary        = NUMBER
 
 ## 12. How It Works Under the Hood
 
-The CPY compiler processes source code through a **four‑stage pipeline**. Each stage transforms the program into a progressively higher‑level representation before finally executing it.
+The CPY compiler processes source code through a **five‑stage pipeline**. The first four stages run at **compile time** to produce a `.cpyc` bytecode file. The fifth stage runs at **execution time** to evaluate the bytecode.
 
 ```
- ┌─────────────┐     ┌──────────┐     ┌───────────┐     ┌──────────────┐
- │ Source Code  │────▶│  Lexer   │────▶│  Parser   │────▶│   Semantic   │
- │  (.cpy file) │     │          │     │           │     │   Analyzer   │
- └─────────────┘     └──────────┘     └───────────┘     └──────────────┘
-                       Tokens           AST Tree          Validated AST
-                                                               │
-                                                               ▼
-                                                        ┌──────────────┐
-                                                        │ Interpreter  │
-                                                        │   (output)   │
-                                                        └──────────────┘
+  COMPILE TIME                                                    RUN TIME
+ ┌─────────────┐    ┌────────┐    ┌────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+ │ Source Code  │───▶│ Lexer  │───▶│ Parser │───▶│ Semantic │───▶│ Bytecode │───▶│  .cpyc   │
+ │  (.cpy file) │    │        │    │        │    │ Analyzer │    │ Compiler │    │   file   │
+ └─────────────┘    └────────┘    └────────┘    └──────────┘    └──────────┘    └──────────┘
+                     Tokens        AST Tree     Validated AST   Instructions         │
+                                                                                     ▼
+                                                                              ┌──────────┐
+                                                                              │   CPY    │
+                                                                              │ Virtual  │
+                                                                              │ Machine  │
+                                                                              └──────────┘
+                                                                                     │
+                                                                                     ▼
+                                                                                  Output
 ```
+
+> **Key distinction:** Compilation and execution are **separate steps**. The `.cpyc` file is a compiled artifact that can be distributed and run independently — the original `.cpy` source is not needed at runtime.
 
 ### 12.1 Stage 1 — Lexical Analysis (Lexer)
 
@@ -660,34 +693,88 @@ Semantic errors:
 
 ---
 
-### 12.4 Stage 4 — Interpretation
+### 12.4 Stage 4 — Bytecode Compilation
 
-**File:** `interpreter/Interpreter.java`
+**File:** `compiler/BytecodeCompiler.java`
 
-The interpreter is a **tree‑walking evaluator**. It traverses the validated AST and executes each node directly — there is no compilation to bytecode or machine code.
+The bytecode compiler walks the validated AST and emits a linear sequence of **stack‑based instructions**. This is the stage that makes CPY a real compiler — it translates the tree representation into flat, executable bytecode.
 
-**Runtime Environment:**
+**Instruction set (26 opcodes):**
 
-The interpreter maintains an **environment** — a `HashMap<String, Object>` that maps variable names to their current runtime values.
+| Category | Instructions |
+|----------|-------------|
+| Constants | `CONST_NUM`, `CONST_STR`, `CONST_CHAR`, `CONST_BOOL`, `CONST_NULL` |
+| Variables | `LOAD`, `STORE` |
+| Arithmetic | `ADD`, `SUB`, `MUL`, `DIV`, `NEG` |
+| Comparison | `EQ`, `NEQ`, `GT`, `GTE`, `LT`, `LTE` |
+| Logical | `AND`, `OR`, `NOT` |
+| Control flow | `JUMP`, `JUMP_IF_FALSE` |
+| Arrays | `MAKE_ARRAY`, `ARRAY_LOAD`, `ARRAY_STORE` |
+| I/O | `PRINT` |
+| Program | `HALT` |
 
-**Execution model:**
+**Jump patching:** Control flow statements (if, while, for) emit `JUMP_IF_FALSE` instructions with a placeholder target of `0`. After compiling the body, the compiler **patches** the jump target to the correct instruction index. This two‑pass technique avoids forward‑reference problems.
 
-| Node Type | Interpreter Action |
-|-----------|-------------------|
-| `VarDecl` | Evaluate initializer, store `name → value` in environment |
-| `Assignment` | Evaluate expression, update `name → value` in environment |
-| `ArrayAssignment` | Look up array, evaluate index, bounds‑check, set element |
-| `PrintStmt` | Evaluate expression, convert to string, write to stdout |
-| `IfStmt` | Evaluate condition; if truthy, execute `thenBranch`; else execute `elseBranch` |
-| `WhileStmt` | Loop: evaluate condition, if truthy execute body, repeat |
-| `ForStmt` | Execute init; loop: evaluate condition, execute body, execute increment |
-| `Block` | Execute each statement sequentially |
-| `Literal` | Return the stored value directly |
-| `Variable` | Look up the name in the environment |
-| `BinaryExpr` | Evaluate both sides, apply operator, return result |
-| `UnaryExpr` | Evaluate operand, apply operator (negate or logical NOT) |
-| `ArrayExpr` | Evaluate each element, collect into a `List<Object>` |
-| `ArrayAccess` | Look up array, evaluate index, bounds‑check, return element |
+**Example compilation:**
+
+```cpy
+let x = 10;
+let y = 20;
+print(x + y);
+```
+
+```
+CONST_NUM 10.0
+STORE x
+CONST_NUM 20.0
+STORE y
+LOAD x
+LOAD y
+ADD
+PRINT
+HALT
+```
+
+**Output format:** The compiled instructions are serialized to a `.cpyc` text file by `BytecodeWriter.java`. The file starts with a `#CPY_BYTECODE v1.0` header, followed by one instruction per line. String operands are quoted and escaped.
+
+---
+
+### 12.5 Stage 5 — Virtual Machine Execution
+
+**File:** `vm/VM.java`
+
+The CPY Virtual Machine is a **stack‑based executor** that reads compiled `.cpyc` bytecode and runs it.
+
+**VM Architecture:**
+
+| Component | Purpose |
+|-----------|--------|
+| **Operand Stack** | Holds intermediate values during computation |
+| **Environment** | `HashMap<String, Object>` mapping variable names to values |
+| **Program Counter (PC)** | Index of the current instruction being executed |
+
+**Execution loop:**
+
+```
+while (pc < program.size()):
+    fetch instruction at program[pc]
+    decode opcode
+    execute (push/pop stack, update env, adjust pc)
+```
+
+**Stack‑based evaluation example:**
+
+For the expression `3 + 4 * 2`:
+
+```
+Instruction      Stack (top →)
+─────────────    ─────────────
+CONST_NUM 3.0    [3]
+CONST_NUM 4.0    [3, 4]
+CONST_NUM 2.0    [3, 4, 2]
+MUL              [3, 8]         ← 4 * 2
+ADD              [11]           ← 3 + 8
+```
 
 **Type coercion rules:**
 
@@ -845,6 +932,6 @@ The following words cannot be used as variable names:
 ---
 
 <p align="center">
-  <em>CPY Language Documentation v1.0 — February 2026</em><br>
-  <em>Built with ❤️ as an educational compiler project</em>
+  <em>CPY Language Documentation v1.1 — February 2026</em><br>
+  <em>Built with ❤️ as a compiler design project</em>
 </p>
