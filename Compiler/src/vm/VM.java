@@ -39,6 +39,7 @@ public class VM {
 
     // ── Instruction dispatch ────────────────────────────────
 
+
     private void execute(Instruction instr) {
         switch (instr.opCode) {
             // ── Constants ──
